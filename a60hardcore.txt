@@ -1,0 +1,398 @@
+---====== Load spawner ======---
+
+local spawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Doors/Entity%20Spawner/V2/Source.lua"))()
+
+---====== Services & Variables ======---
+
+local InsertService = game:GetService("InsertService")
+local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
+
+local RIPPER_ASSET_ID = 123456789 -- Replace with your Ripper Roblox Asset ID
+local ripperTemplate = nil
+
+-- Custom Break Sounds Array
+local breakSounds = {
+	"rbxassetid://9125992545",
+	"rbxassetid://4004052860",
+	"rbxassetid://7142857558",
+	"rbxassetid://7142843615",
+	"rbxassetid://7142857558",
+	"rbxassetid://2612674531",
+	"rbxassetid://2174790942"
+}
+
+-- Helper function to play random LOUD localized destruction sounds
+local function playRandomBreakSound(position, volume)
+	local soundPart = Instance.new("Part")
+	soundPart.Size = Vector3.new(1, 1, 1)
+	soundPart.Position = position
+	soundPart.Anchored = true
+	soundPart.CanCollide = false
+	soundPart.Transparency = 1
+	soundPart.Parent = workspace
+
+	local randomSoundId = breakSounds[math.random(1, #breakSounds)]
+
+	local sound = Instance.new("Sound")
+	sound.SoundId = randomSoundId
+	sound.Volume = volume or 5.0 -- Increased default volume significantly
+	sound.RollOffMaxDistance = 250 -- Extended reach of audio
+	sound.RollOffMinDistance = 20
+	sound.Parent = soundPart
+
+	sound:Play()
+	Debris:AddItem(soundPart, 3)
+end
+
+-- Pre-load the Ripper model
+task.spawn(function()
+	pcall(function()
+		local loadedModel = InsertService:LoadAsset(RIPPER_ASSET_ID)
+		ripperTemplate = loadedModel:FindFirstChildWhichIsA("Model") or loadedModel:FindFirstChildWhichIsA("BasePart")
+	end)
+end)
+
+---====== Blacklist & Rules Configuration ======---
+
+-- Structural items and hiding spots remain safe
+local BLACKLIST = {
+	"Wardrobe",
+	"Closet",
+	"Locker",
+	"Cabinet",
+	"Bed",
+	"Carpet",
+	"Rug",
+	"Figure",
+	"Baseplate",
+	"Floor",
+	"Wall",
+	"Ceiling",
+	"Door",
+	"Elevator"
+}
+
+-- Explicitly allowed decorative items (plants, pots, vases)
+local PLANT_KEYWORDS = {
+	"plant",
+	"pot",
+	"potted",
+	"vase",
+	"flower",
+	"leaf",
+	"leaves",
+	"bush"
+}
+
+local function isPlant(instance)
+	if not instance then return false end
+	local nameLower = instance.Name:lower()
+	for _, kw in ipairs(PLANT_KEYWORDS) do
+		if string.find(nameLower, kw) then
+			return true
+		end
+	end
+	if instance.Parent and instance.Parent ~= workspace then
+		local parentLower = instance.Parent.Name:lower()
+		for _, kw in ipairs(PLANT_KEYWORDS) do
+			if string.find(parentLower, kw) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- Checks standard blacklisted structural items, closets, or carpets
+local function isBlacklisted(instance)
+	if not instance then return true end
+	
+	-- Force plants to bypass blacklist checks
+	if isPlant(instance) then
+		return false
+	end
+
+	for _, name in ipairs(BLACKLIST) do
+		if instance.Name == name or string.find(instance.Name:lower(), name:lower()) then
+			return true
+		end
+	end
+	
+	if instance.Parent and instance.Parent ~= workspace then
+		for _, name in ipairs(BLACKLIST) do
+			if instance.Parent.Name == name or string.find(instance.Parent.Name:lower(), name:lower()) then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+-- Strictly checks ONLY for Guiding Light books (keeps quest items safe)
+local function isGuidingLightBook(instance)
+	if not instance then return false end
+	
+	local nameLower = instance.Name:lower()
+	
+	if nameLower == "livehintbook" or string.find(nameLower, "guiding") or instance:GetAttribute("IsGuidingLight") then
+		return true
+	end
+	
+	if string.find(nameLower, "book") then
+		if instance:FindFirstChildWhichIsA("PointLight") or instance:FindFirstChildWhichIsA("ParticleEmitter") or instance:FindFirstChildWhichIsA("Highlight") then
+			return true
+		end
+		if instance.Parent and (instance.Parent:FindFirstChildWhichIsA("PointLight") or instance.Parent:FindFirstChildWhichIsA("ParticleEmitter")) then
+			return true
+		end
+	end
+	
+	return false
+end
+
+---====== Helper: Unanchor Bookshelf as Whole Model ======---
+
+local function processBookshelf(model, moveDirection)
+	local primaryPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	if not primaryPart then return end
+
+	-- Play loud breaking sound if it hasn't tipped yet
+	if not model:GetAttribute("A60Tipped") then
+		model:SetAttribute("A60Tipped", true)
+		playRandomBreakSound(primaryPart.Position, 7.0)
+	end
+
+	-- Ensure all internal parts are unanchored together so the model tips over intact
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			desc.Anchored = false
+		end
+	end
+
+	-- Throw/Rethrow bookshelf forward in A-60's current movement direction
+	local throwVelocity = (moveDirection + Vector3.new(0, 0.25, 0)).Unit * math.random(120, 180)
+	primaryPart.AssemblyLinearVelocity = throwVelocity
+
+	-- Physics wake-up loop
+	task.spawn(function()
+		for i = 1, 10 do
+			task.wait(0.5)
+			if primaryPart and primaryPart.Parent and not primaryPart.Anchored then
+				primaryPart.AssemblyLinearVelocity = primaryPart.AssemblyLinearVelocity + Vector3.new(0, -2, 0)
+			else
+				break
+			end
+		end
+	end)
+end
+
+---====== Create Entity ======---
+
+local entity = spawner.Create({
+	Entity = {
+		Name = "-60",
+		Asset = "https://github.com/junin724/Depth/raw/refs/heads/main/A-60%20remkae.rbxm",
+		HeightOffset = 0
+	},
+	Sounds = {
+		Far = {
+			SoundId = "rbxassetid://10850925927",
+			Volume = 5,
+			RollOffMaxDistance = 400
+		},
+		Close = {
+			SoundId = "rbxassetid://10815515443",
+			Volume = 8,
+			RollOffMaxDistance = 250
+		}
+	},
+	Lights = {
+		Flicker = {
+			Enabled = false,
+			Duration = 0
+		},
+		Shatter = true,
+		Repair = false
+	},
+	Earthquake = {
+		Enabled = false
+	},
+	CameraShake = {
+		Enabled = true,
+		Range = 450,
+		Values = {1.5, 20, 0.1, 1}
+	},
+	Movement = {
+		Speed = 310,
+		Delay = 4,
+		Reversed = false
+	},
+	Rebounding = {
+		Enabled = true,
+		Type = "Ambush",
+		Min = 4,
+		Max = 4,
+		Delay = 0
+	},
+	Damage = {
+		Enabled = true,
+		Range = 45,
+		Amount = 125
+	},
+	Crucifixion = {
+		Enabled = true,
+		Range = 40,
+		Resist = false,
+		Break = true
+	},
+	Death = {
+		Type = "Guiding",
+		Hints = {"You died to A-60", "hide when TV broke", "Remember all.", "i hope you follow the guide."},
+		Cause = "200"
+	}
+})
+
+---====== Mechanics (Unanchoring & Continuous Rethrowing) ======---
+
+local isMoving = false
+
+local function destructPath(originCFrame, radius)
+	local originPos = originCFrame.Position
+	local moveDirection = originCFrame.LookVector -- Direction A-60 is currently moving
+
+	local region = OverlapParams.new()
+	region.FilterType = Enum.RaycastFilterType.Exclude
+	
+	if entity.Model then
+		region.FilterDescendantsInstances = {entity.Model}
+	end
+
+	local parts = workspace:GetPartBoundsInRadius(originPos, radius, region)
+	local soundCooldown = false
+	
+	for _, part in ipairs(parts) do
+		if part:IsA("BasePart") then
+			-- Skip closets, walls, floors, doors, carpets, and Guiding Light books
+			if not isBlacklisted(part) and not isGuidingLightBook(part) then
+				
+				-- Check if the part belongs to a Bookshelf Model
+				local parentModel = part.Parent
+				if parentModel and parentModel:IsA("Model") and string.find(parentModel.Name:lower(), "bookshelf") then
+					processBookshelf(parentModel, moveDirection)
+				else
+					-- Play loud break sound when newly unanchoring
+					if part.Anchored then
+						part.Anchored = false
+						if not soundCooldown then
+							soundCooldown = true
+							playRandomBreakSound(part.Position, 6.0)
+							task.delay(0.1, function() soundCooldown = false end)
+						end
+					end
+
+					-- Continuously rethrow the item in A-60's active movement direction
+					local throwVelocity = (moveDirection + Vector3.new(math.random(-2, 2)/10, 0.35, math.random(-2, 2)/10)).Unit * math.random(130, 200)
+					part.AssemblyLinearVelocity = throwVelocity
+					
+					-- Physics wake-up loop
+					task.spawn(function()
+						for i = 1, 10 do 
+							task.wait(0.5)
+							if part and part.Parent and not part.Anchored then
+								part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0, -2, 0)
+							else
+								break
+							end
+						end
+					end)
+				end
+
+			end
+		end
+	end
+end
+
+local function throwRipper(originCFrame, velocityVector)
+	local projectile
+	
+	if ripperTemplate then
+		projectile = ripperTemplate:Clone()
+	else
+		projectile = Instance.new("Part")
+		projectile.Size = Vector3.new(3, 3, 3)
+		projectile.Color = Color3.fromRGB(150, 0, 0)
+		projectile.Material = Enum.Material.CorrodedMetal
+	end
+
+	local primaryPart = projectile:IsA("Model") and (projectile.PrimaryPart or projectile:FindFirstChildWhichIsA("BasePart")) or projectile	
+	if not primaryPart then return end
+
+	if isBlacklisted(projectile) then return end
+
+	if projectile:IsA("Model") then
+		projectile:SetPrimaryPartCFrame(originCFrame)
+	else
+		projectile.CFrame = originCFrame
+	end
+
+	projectile.Parent = workspace
+	primaryPart.CanCollide = false
+	primaryPart.AssemblyLinearVelocity = velocityVector
+
+	-- Loud sound on projectile throw
+	playRandomBreakSound(primaryPart.Position, 5.0)
+
+	local touchedConn
+	touchedConn = primaryPart.Touched:Connect(function(hit)
+		local character = hit.Parent
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		
+		if humanoid and Players:GetPlayerFromCharacter(character) then
+			humanoid:TakeDamage(35)
+			touchedConn:Disconnect()
+			projectile:Destroy()
+		end
+	end)
+
+	Debris:AddItem(projectile, 4)
+end
+
+---====== Callbacks ======---
+
+entity:SetCallback("OnStartMoving", function()
+	isMoving = true
+
+	task.spawn(function()
+		while isMoving do
+			local model = entity.Model
+			if model then
+				local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+				if root then
+					local origin = root.CFrame
+					
+					-- Unanchor, rethrow, and fling objects in entity's moving direction
+					destructPath(origin, 45)
+
+					-- Throw Ripper Projectile forward
+					local throwVelocity = (origin.LookVector + Vector3.new(math.random(-2, 2)/10, 0.2, math.random(-2, 2)/10)).Unit * 220
+					throwRipper(origin, throwVelocity)
+				end
+			end
+			task.wait(0.25)
+		end
+	end)
+end)
+
+entity:SetCallback("OnDespawning", function()
+	isMoving = false
+end)
+
+entity:SetCallback("OnDespawned", function()
+	isMoving = false
+end)
+
+---====== Run Entity ======---
+
+entity:Run()
