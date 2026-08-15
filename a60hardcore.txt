@@ -22,6 +22,9 @@ local jumpscareFaces = {
     "rbxassetid://84925768681473"
 }
 
+-- Custom meat texture ID
+local meatTextureId = "rbxassetid://11864978107"
+
 -- Custom Break Sounds Array
 local breakSounds = {
     "rbxassetid://9125992545",
@@ -60,12 +63,12 @@ end
 local function isPlayerHiding()
     local player = Players.LocalPlayer
     if not player or not player.Character then return false end
-    
+
     local char = player.Character
     if char:GetAttribute("Hiding") or char:GetAttribute("Hidden") then
         return true
     end
-    
+
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.SeatPart then
         local seatName = humanoid.SeatPart.Parent.Name:lower()
@@ -73,7 +76,7 @@ local function isPlayerHiding()
             return true
         end
     end
-    
+
     return false
 end
 
@@ -149,7 +152,7 @@ end
 
 local function isBlacklisted(instance)
     if not instance then return true end
-    
+
     if isHidingSpotStructure(instance) then
         return true
     end
@@ -163,7 +166,7 @@ local function isBlacklisted(instance)
             return true
         end
     end
-    
+
     if instance.Parent and instance.Parent ~= workspace then
         for _, name in ipairs(BLACKLIST) do
             if instance.Parent.Name == name or string.find(instance.Parent.Name:lower(), name:lower()) then
@@ -248,7 +251,7 @@ local entity = spawner.Create({
     },
     Damage = {
         Enabled = true,
-        Range = 45,
+        Range = 46,
         Amount = 125
     },
     Crucifixion = {
@@ -295,7 +298,6 @@ local function showEntityWarning()
     end)
 end
 
--- Intercept ProximityPrompts globally so you can't click "Exit" while A-60 is near
 RunService.Stepped:Connect(function()
     if not entity.Model then 
         warningGuiActive = false
@@ -313,13 +315,12 @@ RunService.Stepped:Connect(function()
     local distToEntity = (root.Position - hrp.Position).Magnitude
     local currentlyHiding = isPlayerHiding()
 
-    if currentlyHiding and distToEntity < 200 then
+    if currentlyHiding and distToEntity < 46 then
         if not warningGuiActive then
             warningGuiActive = true
             showEntityWarning()
         end
 
-        -- Completely disable exit/leave prompts on closets within range of the player
         for _, prompt in ipairs(workspace:GetDescendants()) do
             if prompt:IsA("ProximityPrompt") then
                 local actionText = prompt.ActionText and prompt.ActionText:lower() or ""
@@ -333,7 +334,7 @@ RunService.Stepped:Connect(function()
             end
         end
     else
-        if distToEntity >= 220 then
+        if distToEntity >= 50 then
             warningGuiActive = false
         end
     end
@@ -349,12 +350,11 @@ local function destructPath(originCFrame, radius)
 
     local region = OverlapParams.new()
     region.FilterType = Enum.RaycastFilterType.Exclude
-    
+
     local filterList = {}
     if entity.Model then
         table.insert(filterList, entity.Model)
     end
-    -- Also ignore player and current hiding room parts from destruction to avoid dropping players into the void
     if Players.LocalPlayer.Character then
         table.insert(filterList, Players.LocalPlayer.Character)
     end
@@ -362,10 +362,9 @@ local function destructPath(originCFrame, radius)
 
     local parts = workspace:GetPartBoundsInRadius(originPos, radius, region)
     local soundCooldown = false
-    
+
     for _, part in ipairs(parts) do
         if part:IsA("BasePart") then
-            -- Double check: Absolute block on unanchoring anything related to closets, wardrobes, rooms, or floors near hiding areas
             if not isBlacklisted(part) and not isGuidingLightBook(part) then
                 local parentModel = part.Parent
                 if parentModel and parentModel:IsA("Model") and string.find(parentModel.Name:lower(), "bookshelf") then
@@ -399,15 +398,32 @@ local function triggerJumpscareSequence()
     local player = Players.LocalPlayer
     if not player or not player.Character then return end
 
-    local chosenFace = jumpscareFaces[math.random(1, #jumpscareFaces)]
+    local char = player.Character
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.Anchored = true end
 
-    local upperTorso = player.Character:FindFirstChild("UpperTorso")
-    if upperTorso then
-        local decal = Instance.new("Decal")
-        decal.Texture = chosenFace
-        decal.Face = Enum.NormalId.Back
-        decal.Parent = upperTorso
+    -- Loop through all parts in the character and apply meat texture + random faces to any body parts (Torso/UpperTorso/LowerTorso/Head/etc.)
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- Optional: Color parts red to fit the meat theme
+            part.Color = Color3.fromRGB(150, 0, 0)
+
+            -- Apply meat texture to all major faces so it completely covers the body
+            for _, normalId in ipairs(Enum.NormalId:GetEnumItems()) do
+                local meat = Instance.new("Decal")
+                meat.Texture = meatTextureId
+                meat.Face = normalId
+                meat.Parent = part
+
+                local face = Instance.new("Decal")
+                face.Texture = jumpscareFaces[math.random(1, #jumpscareFaces)]
+                face.Face = normalId
+                face.Parent = part
+            end
+        end
     end
+
+    local chosenFace = jumpscareFaces[math.random(1, #jumpscareFaces)]
 
     local screamSound = Instance.new("Sound")
     screamSound.SoundId = SCREAM_SOUND_ID
@@ -422,6 +438,7 @@ local function triggerJumpscareSequence()
         screenGui.Name = "A60ScreenJumpscare"
         screenGui.IgnoreGuiInset = true
         screenGui.DisplayOrder = 999999
+        screenGui.ResetOnSpawn = false
         screenGui.Parent = playerGui
 
         local redFrame = Instance.new("Frame")
@@ -444,7 +461,7 @@ local function triggerJumpscareSequence()
             end
 
             faceImage.Image = chosenFace
-            
+
             local stretchTween = TweenService:Create(faceImage, TweenInfo.new(3.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 Size = UDim2.new(1.4, 0, 1.4, 0),
                 Position = UDim2.new(-0.2, 0, -0.2, 0)
@@ -457,7 +474,7 @@ local function triggerJumpscareSequence()
             local imageFadeTween = TweenService:Create(faceImage, TweenInfo.new(3.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 ImageTransparency = 1
             })
-            
+
             fadeTween:Play()
             imageFadeTween:Play()
 
@@ -494,7 +511,7 @@ entity:SetCallback("OnStartMoving", function()
                         if hrp then
                             if not isPlayerHiding() then
                                 local dist = (root.Position - hrp.Position).Magnitude
-                                if dist <= 40 then
+                                if dist <= 46 then
                                     connection:Disconnect()
                                     triggerJumpscareSequence()
                                 end
