@@ -247,7 +247,7 @@ local entity = spawner.Create({
         Type = "Ambush",
         Min = 4,
         Max = 8,
-        Delay = 0
+        Delay = 2
     },
     Damage = {
         Enabled = true,
@@ -256,14 +256,14 @@ local entity = spawner.Create({
     },
     Crucifixion = {
         Enabled = true,
-        Range = 40,
+        Range = 50,
         Resist = false,
         Break = true
     },
     Death = {
         Type = "Curious",
-        Hints = {"Hmm, Intresting", "It Looks Like A-60 Killed You", "When Its here, it will scream", "I Recommend hiding in a closet"},
-        Cause = "A-60"
+        Hints = {"Look's like [REDACTED] Has got To you", "This one is intresting", "When Its here, it will scream and you will need to hide", "I Recommend hiding in a closet", "[THE FOLOWING CONTENT WAS ENCRYPTED AND REDACTED AND IS NO LONGER ACCESIBLE]", [The body looks like it was severely burned, dont ever come here"},
+        Cause = "[REDACTED]"
     }
 })
 
