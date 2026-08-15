@@ -7,394 +7,512 @@ local spawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/Regul
 local InsertService = game:GetService("InsertService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local RunService = game:GetService("RunService")
 
-local RIPPER_ASSET_ID = 123456789 -- Replace with your Ripper Roblox Asset ID
-local ripperTemplate = nil
+local SCREAM_SOUND_ID = "rbxassetid://97122574985171"
+
+-- Decal/Texture IDs for the jumpscare faces
+local jumpscareFaces = {
+    "rbxassetid://103618072219374",
+    "rbxassetid://16827226038",
+    "rbxassetid://16827233181",
+    "rbxassetid://115900836366359",
+    "rbxassetid://84925768681473"
+}
 
 -- Custom Break Sounds Array
 local breakSounds = {
-	"rbxassetid://9125992545",
-	"rbxassetid://4004052860",
-	"rbxassetid://7142857558",
-	"rbxassetid://7142843615",
-	"rbxassetid://7142857558",
-	"rbxassetid://2612674531",
-	"rbxassetid://2174790942"
+    "rbxassetid://9125992545",
+    "rbxassetid://4004052860",
+    "rbxassetid://7142857558",
+    "rbxassetid://7142843615",
+    "rbxassetid://7142857558",
+    "rbxassetid://2612674531",
+    "rbxassetid://2174790942"
 }
 
--- Helper function to play random LOUD localized destruction sounds
 local function playRandomBreakSound(position, volume)
-	local soundPart = Instance.new("Part")
-	soundPart.Size = Vector3.new(1, 1, 1)
-	soundPart.Position = position
-	soundPart.Anchored = true
-	soundPart.CanCollide = false
-	soundPart.Transparency = 1
-	soundPart.Parent = workspace
+    local soundPart = Instance.new("Part")
+    soundPart.Size = Vector3.new(1, 1, 1)
+    soundPart.Position = position
+    soundPart.Anchored = true
+    soundPart.CanCollide = false
+    soundPart.Transparency = 1
+    soundPart.Parent = workspace
 
-	local randomSoundId = breakSounds[math.random(1, #breakSounds)]
+    local randomSoundId = breakSounds[math.random(1, #breakSounds)]
 
-	local sound = Instance.new("Sound")
-	sound.SoundId = randomSoundId
-	sound.Volume = volume or 5.0 -- Increased default volume significantly
-	sound.RollOffMaxDistance = 250 -- Extended reach of audio
-	sound.RollOffMinDistance = 20
-	sound.Parent = soundPart
+    local sound = Instance.new("Sound")
+    sound.SoundId = randomSoundId
+    sound.Volume = volume or 5.0
+    sound.RollOffMaxDistance = 250
+    sound.RollOffMinDistance = 20
+    sound.Parent = soundPart
 
-	sound:Play()
-	Debris:AddItem(soundPart, 3)
+    sound:Play()
+    Debris:AddItem(soundPart, 3)
 end
 
--- Pre-load the Ripper model
-task.spawn(function()
-	pcall(function()
-		local loadedModel = InsertService:LoadAsset(RIPPER_ASSET_ID)
-		ripperTemplate = loadedModel:FindFirstChildWhichIsA("Model") or loadedModel:FindFirstChildWhichIsA("BasePart")
-	end)
-end)
+---====== Check Doors Hiding System ======---
+
+local function isPlayerHiding()
+    local player = Players.LocalPlayer
+    if not player or not player.Character then return false end
+    
+    local char = player.Character
+    if char:GetAttribute("Hiding") or char:GetAttribute("Hidden") then
+        return true
+    end
+    
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.SeatPart then
+        local seatName = humanoid.SeatPart.Parent.Name:lower()
+        if string.find(seatName, "wardrobe") or string.find(seatName, "closet") or string.find(seatName, "bed") or string.find(seatName, "locker") then
+            return true
+        end
+    end
+    
+    return false
+end
 
 ---====== Blacklist & Rules Configuration ======---
 
--- Structural items and hiding spots remain safe
 local BLACKLIST = {
-	"Wardrobe",
-	"Closet",
-	"Locker",
-	"Cabinet",
-	"Bed",
-	"Carpet",
-	"Rug",
-	"Figure",
-	"Baseplate",
-	"Floor",
-	"Wall",
-	"Ceiling",
-	"Door",
-	"Elevator",
+    "Wardrobe",
+    "Closet",
+    "Locker",
+    "Cabinet",
+    "Bed",
+    "Carpet",
+    "Rug",
+    "Figure",
+    "Baseplate",
+    "Floor",
+    "Wall",
+    "Ceiling",
+    "Door",
+    "Elevator",
     "GrassRegion",
     "GardenPath",
     "Toolshed",
     "Grass"
 }
 
--- Explicitly allowed decorative items (plants, pots, vases)
 local PLANT_KEYWORDS = {
-	"plant",
-	"pot",
-	"potted",
-	"vase",
-	"flower",
-	"leaf",
-	"leaves",
-	"bush"
+    "plant",
+    "pot",
+    "potted",
+    "vase",
+    "flower",
+    "leaf",
+    "leaves",
+    "bush"
 }
 
 local function isPlant(instance)
-	if not instance then return false end
-	local nameLower = instance.Name:lower()
-	for _, kw in ipairs(PLANT_KEYWORDS) do
-		if string.find(nameLower, kw) then
-			return true
-		end
-	end
-	if instance.Parent and instance.Parent ~= workspace then
-		local parentLower = instance.Parent.Name:lower()
-		for _, kw in ipairs(PLANT_KEYWORDS) do
-			if string.find(parentLower, kw) then
-				return true
-			end
-		end
-	end
-	return false
+    if not instance then return false end
+    local nameLower = instance.Name:lower()
+    for _, kw in ipairs(PLANT_KEYWORDS) do
+        if string.find(nameLower, kw) then
+            return true
+        end
+    end
+    if instance.Parent and instance.Parent ~= workspace then
+        local parentLower = instance.Parent.Name:lower()
+        for _, kw in ipairs(PLANT_KEYWORDS) do
+            if string.find(parentLower, kw) then
+                return true
+            end
+        end
+    end
+    return false
 end
 
--- Checks standard blacklisted structural items, closets, or carpets
+local function isHidingSpotStructure(instance)
+    if not instance then return false end
+    local current = instance
+    while current and current ~= workspace do
+        local nameLower = current.Name:lower()
+        if string.find(nameLower, "wardrobe") or 
+           string.find(nameLower, "closet") or 
+           string.find(nameLower, "locker") or 
+           string.find(nameLower, "cabinet") or 
+           string.find(nameLower, "bed") then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
 local function isBlacklisted(instance)
-	if not instance then return true end
-	
-	-- Force plants to bypass blacklist checks
-	if isPlant(instance) then
-		return false
-	end
+    if not instance then return true end
+    
+    if isHidingSpotStructure(instance) then
+        return true
+    end
 
-	for _, name in ipairs(BLACKLIST) do
-		if instance.Name == name or string.find(instance.Name:lower(), name:lower()) then
-			return true
-		end
-	end
-	
-	if instance.Parent and instance.Parent ~= workspace then
-		for _, name in ipairs(BLACKLIST) do
-			if instance.Parent.Name == name or string.find(instance.Parent.Name:lower(), name:lower()) then
-				return true
-			end
-		end
-	end
+    if isPlant(instance) then
+        return false
+    end
 
-	return false
+    for _, name in ipairs(BLACKLIST) do
+        if instance.Name == name or string.find(instance.Name:lower(), name:lower()) then
+            return true
+        end
+    end
+    
+    if instance.Parent and instance.Parent ~= workspace then
+        for _, name in ipairs(BLACKLIST) do
+            if instance.Parent.Name == name or string.find(instance.Parent.Name:lower(), name:lower()) then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
--- Strictly checks ONLY for Guiding Light books (keeps quest items safe)
 local function isGuidingLightBook(instance)
-	if not instance then return false end
-	
-	local nameLower = instance.Name:lower()
-	
-	if nameLower == "livehintbook" or string.find(nameLower, "guiding") or instance:GetAttribute("IsGuidingLight") then
-		return true
-	end
-	
-	if string.find(nameLower, "book") then
-		if instance:FindFirstChildWhichIsA("PointLight") or instance:FindFirstChildWhichIsA("ParticleEmitter") or instance:FindFirstChildWhichIsA("Highlight") then
-			return true
-		end
-		if instance.Parent and (instance.Parent:FindFirstChildWhichIsA("PointLight") or instance.Parent:FindFirstChildWhichIsA("ParticleEmitter")) then
-			return true
-		end
-	end
-	
-	return false
+    if not instance then return false end
+    local nameLower = instance.Name:lower()
+    if nameLower == "livehintbook" or string.find(nameLower, "guiding") or instance:GetAttribute("IsGuidingLight") then
+        return true
+    end
+    return false
 end
-
----====== Helper: Unanchor Bookshelf as Whole Model ======---
 
 local function processBookshelf(model, moveDirection)
-	local primaryPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-	if not primaryPart then return end
+    local primaryPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if not primaryPart then return end
 
-	-- Play loud breaking sound if it hasn't tipped yet
-	if not model:GetAttribute("A60Tipped") then
-		model:SetAttribute("A60Tipped", true)
-		playRandomBreakSound(primaryPart.Position, 7.0)
-	end
+    if not model:GetAttribute("A60Tipped") then
+        model:SetAttribute("A60Tipped", true)
+        playRandomBreakSound(primaryPart.Position, 7.0)
+    end
 
-	-- Ensure all internal parts are unanchored together so the model tips over intact
-	for _, desc in ipairs(model:GetDescendants()) do
-		if desc:IsA("BasePart") then
-			desc.Anchored = false
-		end
-	end
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            desc.Anchored = false
+        end
+    end
 
-	-- Throw/Rethrow bookshelf forward in A-60's current movement direction
-	local throwVelocity = (moveDirection + Vector3.new(0, 0.25, 0)).Unit * math.random(120, 180)
-	primaryPart.AssemblyLinearVelocity = throwVelocity
-
-	-- Physics wake-up loop
-	task.spawn(function()
-		for i = 1, 10 do
-			task.wait(0.5)
-			if primaryPart and primaryPart.Parent and not primaryPart.Anchored then
-				primaryPart.AssemblyLinearVelocity = primaryPart.AssemblyLinearVelocity + Vector3.new(0, -2, 0)
-			else
-				break
-			end
-		end
-	end)
+    local throwVelocity = (moveDirection + Vector3.new(0, 0.25, 0)).Unit * math.random(120, 180)
+    primaryPart.AssemblyLinearVelocity = throwVelocity
 end
 
 ---====== Create Entity ======---
 
 local entity = spawner.Create({
-	Entity = {
-		Name = "-60",
-		Asset = "https://github.com/junin724/Depth/raw/refs/heads/main/A-60%20remkae.rbxm",
-		HeightOffset = 0
-	},
-	Sounds = {
-		Far = {
-			SoundId = "rbxassetid://10850925927",
-			Volume = 5,
-			RollOffMaxDistance = 400
-		},
-		Close = {
-			SoundId = "rbxassetid://10815515443",
-			Volume = 8,
-			RollOffMaxDistance = 250
-		}
-	},
-	Lights = {
-		Flicker = {
-			Enabled = false,
-			Duration = 0
-		},
-		Shatter = true,
-		Repair = false
-	},
-	Earthquake = {
-		Enabled = true
-	},
-	CameraShake = {
-		Enabled = true,
-		Range = 450,
-		Values = {1.5, 20, 0.1, 1}
-	},
-	Movement = {
-		Speed = 310,
-		Delay = 4,
-		Reversed = false
-	},
-	Rebounding = {
-		Enabled = true,
-		Type = "Ambush",
-		Min = 4,
-		Max = 8,
-		Delay = 0
-	},
-	Damage = {
-		Enabled = true,
-		Range = 45,
-		Amount = 125
-	},
-	Crucifixion = {
-		Enabled = true,
-		Range = 40,
-		Resist = false,
-		Break = true
-	},
-	Death = {
-		Type = "Guiding",
-		Hints = {"You died to A-60", "When It spawns, remember that it will scream, go hide in a closet", "Remember all.", "i hope you follow the guide."},
-		Cause = "A-60"
-	}
+    Entity = {
+        Name = "-60",
+        Asset = "https://github.com/junin724/Depth/raw/refs/heads/main/A-60%20remkae.rbxm",
+        HeightOffset = 0
+    },
+    Sounds = {
+        Far = {
+            SoundId = "rbxassetid://10850925927",
+            Volume = 5,
+            RollOffMaxDistance = 400
+        },
+        Close = {
+            SoundId = "rbxassetid://10815515443",
+            Volume = 8,
+            RollOffMaxDistance = 250
+        }
+    },
+    Lights = {
+        Flicker = { Enabled = false, Duration = 0 },
+        Shatter = true,
+        Repair = false
+    },
+    Earthquake = { Enabled = true },
+    CameraShake = {
+        Enabled = true,
+        Range = 450,
+        Values = {1.5, 20, 0.1, 1}
+    },
+    Movement = {
+        Speed = 310,
+        Delay = 4,
+        Reversed = false
+    },
+    Rebounding = {
+        Enabled = true,
+        Type = "Ambush",
+        Min = 4,
+        Max = 8,
+        Delay = 0
+    },
+    Damage = {
+        Enabled = true,
+        Range = 45,
+        Amount = 125
+    },
+    Crucifixion = {
+        Enabled = true,
+        Range = 40,
+        Resist = false,
+        Break = true
+    },
+    Death = {
+        Type = "Curious",
+        Hints = {"Hmm, Intresting", "It Looks Like A-60 Killed You", "When Its here, it will scream", "I Recommend hiding in a closet"},
+        Cause = "A-60"
+    }
 })
 
----====== Mechanics (Unanchoring & Continuous Rethrowing) ======---
+---====== Bulletproof Closet Protection & Strict Radius Exclusion ======---
+
+local warningGuiActive = false
+
+local function showEntityWarning()
+    local player = Players.LocalPlayer
+    if not player then return end
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not playerGui or playerGui:FindFirstChild("A60WarningGui") then return end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "A60WarningGui"
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 9998
+    screenGui.Parent = playerGui
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 0, 50)
+    textLabel.Position = UDim2.new(0, 0, 0.15, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.Text = " "
+    textLabel.Parent = screenGui
+
+    task.delay(4, function()
+        if screenGui and screenGui.Parent then screenGui:Destroy() end
+    end)
+end
+
+-- Intercept ProximityPrompts globally so you can't click "Exit" while A-60 is near
+RunService.Stepped:Connect(function()
+    if not entity.Model then 
+        warningGuiActive = false
+        return 
+    end
+
+    local model = entity.Model
+    local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    local player = Players.LocalPlayer
+    if not root or not player or not player.Character then return end
+
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+    if not hrp then return end
+
+    local distToEntity = (root.Position - hrp.Position).Magnitude
+    local currentlyHiding = isPlayerHiding()
+
+    if currentlyHiding and distToEntity < 200 then
+        if not warningGuiActive then
+            warningGuiActive = true
+            showEntityWarning()
+        end
+
+        -- Completely disable exit/leave prompts on closets within range of the player
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local actionText = prompt.ActionText and prompt.ActionText:lower() or ""
+                local objectText = prompt.ObjectText and prompt.ObjectText:lower() or ""
+                if string.find(actionText, "exit") or string.find(actionText, "leave") or string.find(objectText, "wardrobe") or string.find(objectText, "closet") then
+                    prompt.Enabled = false
+                    task.delay(0.2, function()
+                        if prompt then prompt.Enabled = true end
+                    end)
+                end
+            end
+        end
+    else
+        if distToEntity >= 220 then
+            warningGuiActive = false
+        end
+    end
+end)
+
+---====== Mechanics (Strictly Ignoring Hiding Rooms) ======---
 
 local isMoving = false
 
 local function destructPath(originCFrame, radius)
-	local originPos = originCFrame.Position
-	local moveDirection = originCFrame.LookVector -- Direction A-60 is currently moving
+    local originPos = originCFrame.Position
+    local moveDirection = originCFrame.LookVector
 
-	local region = OverlapParams.new()
-	region.FilterType = Enum.RaycastFilterType.Exclude
-	
-	if entity.Model then
-		region.FilterDescendantsInstances = {entity.Model}
-	end
+    local region = OverlapParams.new()
+    region.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local filterList = {}
+    if entity.Model then
+        table.insert(filterList, entity.Model)
+    end
+    -- Also ignore player and current hiding room parts from destruction to avoid dropping players into the void
+    if Players.LocalPlayer.Character then
+        table.insert(filterList, Players.LocalPlayer.Character)
+    end
+    region.FilterDescendantsInstances = filterList
 
-	local parts = workspace:GetPartBoundsInRadius(originPos, radius, region)
-	local soundCooldown = false
-	
-	for _, part in ipairs(parts) do
-		if part:IsA("BasePart") then
-			-- Skip closets, walls, floors, doors, carpets, and Guiding Light books
-			if not isBlacklisted(part) and not isGuidingLightBook(part) then
-				
-				-- Check if the part belongs to a Bookshelf Model
-				local parentModel = part.Parent
-				if parentModel and parentModel:IsA("Model") and string.find(parentModel.Name:lower(), "bookshelf") then
-					processBookshelf(parentModel, moveDirection)
-				else
-					-- Play loud break sound when newly unanchoring
-					if part.Anchored then
-						part.Anchored = false
-						if not soundCooldown then
-							soundCooldown = true
-							playRandomBreakSound(part.Position, 6.0)
-							task.delay(0.1, function() soundCooldown = false end)
-						end
-					end
+    local parts = workspace:GetPartBoundsInRadius(originPos, radius, region)
+    local soundCooldown = false
+    
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") then
+            -- Double check: Absolute block on unanchoring anything related to closets, wardrobes, rooms, or floors near hiding areas
+            if not isBlacklisted(part) and not isGuidingLightBook(part) then
+                local parentModel = part.Parent
+                if parentModel and parentModel:IsA("Model") and string.find(parentModel.Name:lower(), "bookshelf") then
+                    processBookshelf(parentModel, moveDirection)
+                else
+                    if part.Anchored then
+                        part.Anchored = false
+                        if not soundCooldown then
+                            soundCooldown = true
+                            playRandomBreakSound(part.Position, 6.0)
+                            task.delay(0.1, function() soundCooldown = false end)
+                        end
+                    end
 
-					-- Continuously rethrow the item in A-60's active movement direction
-					local throwVelocity = (moveDirection + Vector3.new(math.random(-2, 2)/10, 0.35, math.random(-2, 2)/10)).Unit * math.random(130, 200)
-					part.AssemblyLinearVelocity = throwVelocity
-					
-					-- Physics wake-up loop
-					task.spawn(function()
-						for i = 1, 10 do 
-							task.wait(0.5)
-							if part and part.Parent and not part.Anchored then
-								part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0, -2, 0)
-							else
-								break
-							end
-						end
-					end)
-				end
-
-			end
-		end
-	end
-end
-
-local function throwRipper(originCFrame, velocityVector)
-	local projectile
-	
-	if ripperTemplate then
-		projectile = ripperTemplate:Clone()
-	else
-		projectile = Instance.new("Part")
-		projectile.Size = Vector3.new(3, 3, 3)
-		projectile.Color = Color3.fromRGB(150, 0, 0)
-		projectile.Material = Enum.Material.CorrodedMetal
-	end
-
-	local primaryPart = projectile:IsA("Model") and (projectile.PrimaryPart or projectile:FindFirstChildWhichIsA("BasePart")) or projectile	
-	if not primaryPart then return end
-
-	if isBlacklisted(projectile) then return end
-
-	if projectile:IsA("Model") then
-		projectile:SetPrimaryPartCFrame(originCFrame)
-	else
-		projectile.CFrame = originCFrame
-	end
-
-	projectile.Parent = workspace
-	primaryPart.CanCollide = false
-	primaryPart.AssemblyLinearVelocity = velocityVector
-
-	-- Loud sound on projectile throw
-	playRandomBreakSound(primaryPart.Position, 5.0)
-
-	local touchedConn
-	touchedConn = primaryPart.Touched:Connect(function(hit)
-		local character = hit.Parent
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		
-		if humanoid and Players:GetPlayerFromCharacter(character) then
-			humanoid:TakeDamage(35)
-			touchedConn:Disconnect()
-			projectile:Destroy()
-		end
-	end)
-
-	Debris:AddItem(projectile, 4)
+                    local throwVelocity = (moveDirection + Vector3.new(math.random(-2, 2)/10, 0.35, math.random(-2, 2)/10)).Unit * math.random(130, 200)
+                    part.AssemblyLinearVelocity = throwVelocity
+                end
+            end
+        end
+    end
 end
 
 ---====== Callbacks ======---
 
+local hasTriggeredJumpscare = false
+
+local function triggerJumpscareSequence()
+    if hasTriggeredJumpscare then return end
+    hasTriggeredJumpscare = true
+
+    local player = Players.LocalPlayer
+    if not player or not player.Character then return end
+
+    local chosenFace = jumpscareFaces[math.random(1, #jumpscareFaces)]
+
+    local upperTorso = player.Character:FindFirstChild("UpperTorso")
+    if upperTorso then
+        local decal = Instance.new("Decal")
+        decal.Texture = chosenFace
+        decal.Face = Enum.NormalId.Back
+        decal.Parent = upperTorso
+    end
+
+    local screamSound = Instance.new("Sound")
+    screamSound.SoundId = SCREAM_SOUND_ID
+    screamSound.Volume = 10
+    screamSound.Parent = SoundService
+    screamSound:Play()
+    Debris:AddItem(screamSound, 5)
+
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "A60ScreenJumpscare"
+        screenGui.IgnoreGuiInset = true
+        screenGui.DisplayOrder = 999999
+        screenGui.Parent = playerGui
+
+        local redFrame = Instance.new("Frame")
+        redFrame.Size = UDim2.new(1, 0, 1, 0)
+        redFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        redFrame.BackgroundTransparency = 0.3
+        redFrame.BorderSizePixel = 0
+        redFrame.Parent = screenGui
+
+        local faceImage = Instance.new("ImageLabel")
+        faceImage.Size = UDim2.new(1, 0, 1, 0)
+        faceImage.BackgroundTransparency = 1
+        faceImage.ScaleType = Enum.ScaleType.Fit
+        faceImage.Parent = screenGui
+
+        task.spawn(function()
+            for i = 1, 25 do
+                faceImage.Image = jumpscareFaces[math.random(1, #jumpscareFaces)]
+                task.wait(0.03)
+            end
+
+            faceImage.Image = chosenFace
+            
+            local stretchTween = TweenService:Create(faceImage, TweenInfo.new(3.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1.4, 0, 1.4, 0),
+                Position = UDim2.new(-0.2, 0, -0.2, 0)
+            })
+            stretchTween:Play()
+
+            local fadeTween = TweenService:Create(redFrame, TweenInfo.new(3.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundTransparency = 1
+            })
+            local imageFadeTween = TweenService:Create(faceImage, TweenInfo.new(3.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                ImageTransparency = 1
+            })
+            
+            fadeTween:Play()
+            imageFadeTween:Play()
+
+            imageFadeTween.Completed:Connect(function()
+                screenGui:Destroy()
+            end)
+        end)
+    end
+end
+
 entity:SetCallback("OnStartMoving", function()
-	isMoving = true
+    isMoving = true
+    hasTriggeredJumpscare = false
 
-	task.spawn(function()
-		while isMoving do
-			local model = entity.Model
-			if model then
-				local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-				if root then
-					local origin = root.CFrame
-					
-					-- Unanchor, rethrow, and fling objects in entity's moving direction
-					destructPath(origin, 45)
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not isMoving or hasTriggeredJumpscare then
+            if connection then connection:Disconnect() end
+            return
+        end
 
-					-- Throw Ripper Projectile forward
-					local throwVelocity = (origin.LookVector + Vector3.new(math.random(-2, 2)/10, 0.2, math.random(-2, 2)/10)).Unit * 220
-					throwRipper(origin, throwVelocity)
-				end
-			end
-			task.wait(0.25)
-		end
-	end)
+        local model = entity.Model
+        if model then
+            local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+            if root then
+                local origin = root.CFrame
+                destructPath(origin, 45)
+
+                local player = Players.LocalPlayer
+                if player and player.Character then
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
+                        local hrp = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+                        if hrp then
+                            if not isPlayerHiding() then
+                                local dist = (root.Position - hrp.Position).Magnitude
+                                if dist <= 40 then
+                                    connection:Disconnect()
+                                    triggerJumpscareSequence()
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
 end)
 
 entity:SetCallback("OnDespawning", function()
-	isMoving = false
+    isMoving = false
 end)
 
 entity:SetCallback("OnDespawned", function()
-	isMoving = false
+    isMoving = false
 end)
 
 ---====== Run Entity ======---
