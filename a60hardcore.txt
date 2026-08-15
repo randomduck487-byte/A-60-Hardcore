@@ -262,7 +262,7 @@ local entity = spawner.Create({
     },
     Death = {
         Type = "Curious",
-        Hints = {"Look's like [REDACTED] Has got To you", "This one is intresting", "When Its here, it will scream and you will need to hide", "I Recommend hiding in a closet", "[THE FOLOWING CONTENT WAS ENCRYPTED AND REDACTED AND IS NO LONGER ACCESIBLE]", [The body looks like it was severely burned, dont ever come here"},
+        Hints = {"Look's like [REDACTED] Has got To you", "This one is intresting", "When Its here, it will scream and you will need to hide", "I Recommend hiding in a closet", "[THE FOLOWING CONTENT WAS ENCRYPTED AND REDACTED AND IS NO LONGER ACCESIBLE]", "[The body looks like it was severely burned, dont ever come here]"},
         Cause = "[REDACTED]"
     }
 })
