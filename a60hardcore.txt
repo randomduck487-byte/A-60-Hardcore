@@ -104,7 +104,24 @@ local BLACKLIST = {
     "RushNew",
     "Rush",
     "Ambush",
-    "RipperNotMoving"
+    "RipperNotMoving",
+    "Ripe",
+    "-60",
+    "A-200",
+    "Dread",
+    "Rebound",
+    "Shocker",
+    "Base",
+    "CeaseMoving",
+    "HSUR",
+    "Deer God",
+    "Silence",
+    "Singularity",
+    "Head",
+    "Main",
+    "Neck",
+    "Frostyma5n",
+    "FrostyNew"
 }
 
 local PLANT_KEYWORDS = {
