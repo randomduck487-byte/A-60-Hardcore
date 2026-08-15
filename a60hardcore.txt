@@ -70,7 +70,11 @@ local BLACKLIST = {
 	"Wall",
 	"Ceiling",
 	"Door",
-	"Elevator"
+	"Elevator",
+    "GrassRegion",
+    "GardenPath",
+    "Toolshed",
+    "Grass"
 }
 
 -- Explicitly allowed decorative items (plants, pots, vases)
@@ -217,7 +221,7 @@ local entity = spawner.Create({
 		Repair = false
 	},
 	Earthquake = {
-		Enabled = false
+		Enabled = true
 	},
 	CameraShake = {
 		Enabled = true,
@@ -233,7 +237,7 @@ local entity = spawner.Create({
 		Enabled = true,
 		Type = "Ambush",
 		Min = 4,
-		Max = 4,
+		Max = 8,
 		Delay = 0
 	},
 	Damage = {
@@ -249,8 +253,8 @@ local entity = spawner.Create({
 	},
 	Death = {
 		Type = "Guiding",
-		Hints = {"You died to A-60", "hide when TV broke", "Remember all.", "i hope you follow the guide."},
-		Cause = "200"
+		Hints = {"You died to A-60", "When It spawns, remember that it will scream, go hide in a closet", "Remember all.", "i hope you follow the guide."},
+		Cause = "A-60"
 	}
 })
 
