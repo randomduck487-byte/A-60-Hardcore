@@ -100,8 +100,11 @@ local BLACKLIST = {
     "GrassRegion",
     "GardenPath",
     "Toolshed",
-    "Grass"
-    "RushNew"
+    "Grass",
+    "RushNew",
+    "Rush",
+    "Ambush",
+    "RipperNotMoving"
 }
 
 local PLANT_KEYWORDS = {
